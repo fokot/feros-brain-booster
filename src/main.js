@@ -27,17 +27,65 @@ try { renderer = new THREE.WebGLRenderer({antialias:true, alpha:true}); } catch 
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 viewport.prepend(renderer.domElement);
 renderer.domElement.setAttribute('aria-label','3D tréningová plocha. Po zastavení vyber gule kliknutím alebo klávesmi 1 až 8.');
-scene.add(new THREE.AmbientLight(0xcadbd0, 2));
-const light = new THREE.DirectionalLight(0xffffff, 4); light.position.set(-3,5,8); scene.add(light);
-const rim = new THREE.PointLight(0xb9ff7b, 30); rim.position.set(3,-3,3); scene.add(rim);
-const cube = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(6.2,6.2,6.2)), new THREE.LineBasicMaterial({color:0x79998b,transparent:true,opacity:.15}));scene.add(cube);
+// A lit room gives the moving objects stable spatial references.
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+scene.fog = new THREE.Fog(0x101c17, 11, 24);
+scene.add(new THREE.HemisphereLight(0xe4f1dd, 0x536d5c, 1.5));
+scene.add(new THREE.AmbientLight(0xb5d5bd, .4));
+const light = new THREE.DirectionalLight(0xfff5dd, 3.2);
+light.position.set(-3, 6, 7);
+light.castShadow = true;
+light.shadow.mapSize.set(2048, 2048);
+Object.assign(light.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: .5, far: 22 });
+light.shadow.radius = 4;
+light.shadow.normalBias = .025;
+light.shadow.bias = -.00015;
+light.shadow.camera.updateProjectionMatrix();
+scene.add(light);
+const rim = new THREE.PointLight(0xc4efba, 14);
+rim.position.set(3, 1, 1);
+scene.add(rim);
+const roomSize = 6.2;
+const roomGeometry = new THREE.PlaneGeometry(roomSize, roomSize);
+function addWall(color, position, rotation) {
+  const wall = new THREE.Mesh(roomGeometry, new THREE.MeshStandardMaterial({ color, roughness: .95 }));
+  wall.position.set(...position);
+  wall.rotation.set(...rotation);
+  wall.receiveShadow = true;
+  scene.add(wall);
+  return wall;
+}
+addWall(0x22372e, [0, 0, -3.1], [0, 0, 0]);
+addWall(0x2b4035, [0, -3.1, 0], [-Math.PI / 2, 0, 0]);
+addWall(0x1b3028, [-3.1, 0, 0], [0, Math.PI / 2, 0]);
+addWall(0x1b3028, [3.1, 0, 0], [0, -Math.PI / 2, 0]);
+// The open front and ceiling keep every target visible.
+const floorGrid = new THREE.GridHelper(roomSize, 8, 0x8fa997, 0x6b8d79);
+floorGrid.position.y = -3.095;
+floorGrid.material.transparent = true;
+floorGrid.material.opacity = .24;
+scene.add(floorGrid);
+const backGrid = new THREE.GridHelper(roomSize, 8, 0x7c9d89, 0x648272);
+backGrid.rotation.x = Math.PI / 2;
+backGrid.position.z = -3.095;
+backGrid.material.transparent = true;
+backGrid.material.opacity = .16;
+scene.add(backGrid);
+const cube = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(roomSize, roomSize, roomSize)),
+  new THREE.LineBasicMaterial({color: 0xa5c4ae, transparent: true, opacity: .34})
+);
+scene.add(cube);
 const balls = [];
 const geometry = new THREE.SphereGeometry(.29,32,24);
 function makeLabel(n) {const c=document.createElement('canvas');c.width=128;c.height=128;const ctx=c.getContext('2d');ctx.font='bold 68px sans-serif';ctx.fillStyle='#122019';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(n,64,68);const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));sprite.scale.set(.36,.36,1);sprite.visible=false;return sprite;}
-for(let i=0;i<8;i++){const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0xdbe7d5,roughness:.3,metalness:.16}));const label=makeLabel(i+1);scene.add(mesh,label);balls.push({mesh,label,position:mesh.position,velocity:new THREE.Vector3()});}
+for(let i=0;i<8;i++){const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0xdbe7d5,roughness:.3,metalness:.16}));const label=makeLabel(i+1);mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh,label);balls.push({mesh,label,position:mesh.position,velocity:new THREE.Vector3()});}
 function resetBalls(){balls.forEach((b,i)=>{b.position.set((i%2?1:-1)*(1.2+Math.random()*.8),(Math.floor(i/2)%2?1:-1)*(1+Math.random()*.8),(i<4?-1:1)*(1+Math.random()*.7));b.velocity.set(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize();});}
-function paint(){balls.forEach((b,i)=>{let color=0xdbe7d5;if(phase==='memorize'&&targets.includes(i))color=0xc6f68a;if(phase==='select'&&selected.includes(i))color=0xc6f68a;if(phase==='feedback')color=targets.includes(i)?0xc6f68a:selected.includes(i)?0xf28b82:0x68776d;b.mesh.material.color.setHex(color);b.mesh.material.emissive.setHex(color===0xc6f68a?0x233b10:0);b.label.visible=phase==='select';});}
-function resize(){const w=viewport.clientWidth,h=viewport.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.position.z=camera.aspect<1?15/camera.aspect:12;camera.updateProjectionMatrix();}
+function paint(){balls.forEach((b,i)=>{let color=0xdbe7d5;if(phase==='memorize'&&targets.includes(i))color=0xc6f68a;if(phase==='select'&&selected.includes(i))color=0xc6f68a;if(phase==='feedback')color=targets.includes(i)?0xc6f68a:selected.includes(i)?0xf28b82:0x68776d;b.mesh.material.color.setHex(color);b.mesh.material.emissive.setHex(color===0xc6f68a?0x659e23:0);b.label.visible=phase==='select';});}
+function resize(){const w=viewport.clientWidth,h=viewport.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.position.set(1.15,.85,camera.aspect<1?13/camera.aspect:13);camera.lookAt(0,0,0);camera.updateProjectionMatrix();}
 new ResizeObserver(resize).observe(viewport);
 resetBalls();paint();resize();
 const configInputs=['target-count','duration','round-count','initial-speed'];
